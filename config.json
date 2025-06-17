@@ -1,0 +1,7 @@
+{
+    "kafka_url": "",
+    "topic_config_location": "",
+    "allow_topic_delete": true,
+    "enable_kubernetes_pod_restart": false,
+    "dry_run": false
+}

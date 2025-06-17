@@ -1,0 +1,28 @@
+version: 1
+topics:
+  - name: test-1
+    partitions: 2
+    replicas: 2
+    config:
+      retention.ms: 5000000
+      segment.bytes: 1000000000
+  - name: test-2
+    partitions: 2
+    replicas: 2
+    restart:
+      - namespace: ns2
+        app: a2
+  - name: test-3
+    partitions: 1
+    restart:
+      - namespace: ns3
+        app: a3
+  - name: test-4
+    partitions: 2
+    restart:
+      - namespace: ns4
+        app: a4
+  - name: test-5
+    config:
+      retention.ms: 5000000
+      segment.bytes: 1000000000
