@@ -26,7 +26,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -97,17 +99,44 @@ func Test(t *testing.T) {
 		}
 	})
 
+	testfile := t.TempDir() + "/testfile.yaml"
+
 	t.Run("rerun", func(t *testing.T) {
 		config := configuration.Config{
 			KafkaUrl:                   kafkaUrls[0],
 			TopicConfigLocation:        "./resources/topic_config_init.yaml",
 			AllowTopicDelete:           true,
 			EnableKubernetesPodRestart: true,
+			LogCurrentState:            true,
+			LogCurrentStateToFile:      testfile,
 		}
 		err = pkg.RunWithKubeClient(config, kubeClient)
 		if err != nil {
 			t.Error(err)
 			return
+		}
+	})
+
+	t.Run("check current", func(t *testing.T) {
+		actual, err := configuration.LoadTopicConfigsFromYaml(testfile)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		expected, err := configuration.LoadTopicConfigsFromYaml("./resources/topic_config_init.yaml")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		slices.SortFunc(expected.Topics, func(a, b configuration.TopicConfig) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+		for i, topic := range expected.Topics {
+			topic.Restart = []configuration.TopicConfigRestart{}
+			expected.Topics[i] = topic
+		}
+		if !reflect.DeepEqual(actual, expected) {
+			t.Errorf("\na=%#v\ne=%#v\n", actual, expected)
 		}
 	})
 
@@ -281,4 +310,5 @@ func Test(t *testing.T) {
 			t.Errorf("\ne:%#v\na:%#v\n", expectedObj, actualObj)
 		}
 	})
+
 }

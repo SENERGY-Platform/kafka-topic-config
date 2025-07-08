@@ -58,6 +58,13 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	var commands Commands
 
+	if config.LogCurrentState {
+		err = LogCurrentState(config, client, partitions)
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, topic := range topics {
 		temp, err := CollectCommandsForTopic(config, broker, partitions, topic)
 		if err != nil {

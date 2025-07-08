@@ -1,6 +1,6 @@
 version: 1
 topics:
-  - name: test-1
+  - name: "test-1"
     partitions: 3
     replicas: 2
     config:

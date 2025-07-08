@@ -30,8 +30,8 @@ type TopicConfig struct {
 	Name       string               `yaml:"name"`
 	Partitions int                  `yaml:"partitions"`
 	Replicas   int                  `yaml:"replicas"`
-	Config     map[string]string    `yaml:"config"`
-	Restart    []TopicConfigRestart `yaml:"restart"`
+	Config     map[string]string    `yaml:"config,omitempty"`
+	Restart    []TopicConfigRestart `yaml:"restart,omitempty"`
 }
 
 type TopicConfigRestart struct {
@@ -65,5 +65,11 @@ func (this *TopicConfig) SetDefaults() {
 	}
 	if this.Replicas == 0 {
 		this.Replicas = 1
+	}
+	if this.Restart == nil {
+		this.Restart = []TopicConfigRestart{}
+	}
+	if this.Config == nil {
+		this.Config = map[string]string{}
 	}
 }
