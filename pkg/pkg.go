@@ -17,6 +17,7 @@
 package pkg
 
 import (
+	"fmt"
 	"github.com/SENERGY-Platform/kafka-topic-config/pkg/configuration"
 	"k8s.io/client-go/kubernetes"
 )
@@ -32,10 +33,16 @@ func Run(config configuration.Config) (err error) {
 	return RunWithKubeClient(config, kubeClient)
 }
 
-func RunWithKubeClient(config configuration.Config, kubeClient kubernetes.Interface) error {
-	topics, err := configuration.LoadTopicConfigsFromYaml(config.TopicConfigLocation)
-	if err != nil {
-		return err
+func RunWithKubeClient(config configuration.Config, kubeClient kubernetes.Interface) (err error) {
+	var topics = configuration.TopicConfigs{}
+	if config.TopicConfigLocation != "" && config.TopicConfigLocation != "-" {
+		topics, err = configuration.LoadTopicConfigsFromYaml(config.TopicConfigLocation)
+		if err != nil {
+			return err
+		}
+	} else {
+		fmt.Println("no topic_config_location set")
+		config.DryRun = true
 	}
 	return SetTopics(config, kubeClient, topics.Topics)
 }

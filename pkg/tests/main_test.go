@@ -311,4 +311,40 @@ func Test(t *testing.T) {
 		}
 	})
 
+	t.Run("log only", func(t *testing.T) {
+		config := configuration.Config{
+			KafkaUrl:              kafkaUrls[0],
+			LogCurrentState:       true,
+			LogCurrentStateToFile: testfile,
+		}
+		err = pkg.RunWithKubeClient(config, kubeClient)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+	})
+
+	t.Run("check current", func(t *testing.T) {
+		actual, err := configuration.LoadTopicConfigsFromYaml(testfile)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		expected, err := configuration.LoadTopicConfigsFromYaml("./resources/topic_config_update_with_restart.yaml")
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		slices.SortFunc(expected.Topics, func(a, b configuration.TopicConfig) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+		for i, topic := range expected.Topics {
+			topic.Restart = []configuration.TopicConfigRestart{}
+			expected.Topics[i] = topic
+		}
+		if !reflect.DeepEqual(actual, expected) {
+			t.Errorf("\na=%#v\ne=%#v\n", actual, expected)
+		}
+	})
+
 }
