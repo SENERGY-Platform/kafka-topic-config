@@ -50,8 +50,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 	requestLogger := &KafkaClientRequestLogger{}
 
 	client := &kafka.Client{
-		Addr:    kafka.TCP(brokerAddr...),
-		Timeout: 10 * time.Second,
+		Addr: kafka.TCP(brokerAddr...),
 	}
 
 	//collect commands
