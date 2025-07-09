@@ -24,6 +24,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"k8s.io/client-go/kubernetes"
 	"math/rand"
+	"reflect"
 	"slices"
 	"time"
 )
@@ -57,15 +58,20 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	var commands Commands
 
+	current, err := GetCurrentState(config, client, partitions)
+	if err != nil {
+		return err
+	}
+
 	if config.LogCurrentState {
-		err = LogCurrentState(config, client, partitions)
+		err = LogCurrentState(config, current)
 		if err != nil {
 			return err
 		}
 	}
 
 	for _, topic := range topics {
-		temp, err := CollectCommandsForTopic(config, broker, partitions, topic)
+		temp, err := CollectCommandsForTopic(config, broker, partitions, current, topic)
 		if err != nil {
 			return err
 		}
@@ -159,43 +165,48 @@ func (this *Commands) Merge(other Commands) {
 	this.restarts = append(this.restarts, other.restarts...)
 }
 
-func CollectCommandsForTopic(config configuration.Config, broker []kafka.Broker, partitions []kafka.Partition, topic configuration.TopicConfig) (commands Commands, err error) {
+func CollectCommandsForTopic(config configuration.Config, broker []kafka.Broker, partitions []kafka.Partition, currentList configuration.TopicConfigs, topic configuration.TopicConfig) (commands Commands, err error) {
 	if topic.Replicas > len(broker) {
 		return commands, fmt.Errorf("topic %v tries to use replication-factor %v whole only %v brokers are known", topic.Name, topic.Replicas, len(broker))
 	}
 
+	var current configuration.TopicConfig
+	for _, currentTopic := range currentList.Topics {
+		if currentTopic.Name == topic.Name {
+			current = currentTopic
+			break
+		}
+	}
+
 	topicPartitions := []kafka.Partition{}
-	currentReplication := 0
 	for _, partition := range partitions {
 		if partition.Topic == topic.Name {
 			topicPartitions = append(topicPartitions, partition)
-			replicas := len(partition.Replicas)
-			if currentReplication < replicas {
-				currentReplication = replicas
-			}
 		}
 	}
-	currentTopicPartitionCount := len(topicPartitions)
-	isUpdate := currentTopicPartitionCount > 0
+
+	isUpdate := current.Partitions > 0
 	if isUpdate {
 		restartTopic := false
 
-		//handle changed topic config
-		alterConfigsResources := []kafka.AlterConfigRequestConfig{}
-		for key, value := range topic.Config {
-			alterConfigsResources = append(alterConfigsResources, kafka.AlterConfigRequestConfig{
-				Name:  key,
-				Value: value,
+		if !reflect.DeepEqual(current.Config, topic.Config) {
+			//handle changed topic config
+			alterConfigsResources := []kafka.AlterConfigRequestConfig{}
+			for key, value := range topic.Config {
+				alterConfigsResources = append(alterConfigsResources, kafka.AlterConfigRequestConfig{
+					Name:  key,
+					Value: value,
+				})
+			}
+			commands.alterConfig = append(commands.alterConfig, kafka.AlterConfigRequestResource{
+				ResourceType: kafka.ResourceTypeTopic,
+				ResourceName: topic.Name,
+				Configs:      alterConfigsResources,
 			})
 		}
-		commands.alterConfig = append(commands.alterConfig, kafka.AlterConfigRequestResource{
-			ResourceType: kafka.ResourceTypeTopic,
-			ResourceName: topic.Name,
-			Configs:      alterConfigsResources,
-		})
 
 		//handle added partitions
-		if currentTopicPartitionCount < topic.Partitions {
+		if current.Partitions < topic.Partitions {
 			commands.createPartitions = append(commands.createPartitions, kafka.TopicPartitionsConfig{
 				Name:                      topic.Name,
 				Count:                     int32(topic.Partitions),
@@ -205,7 +216,7 @@ func CollectCommandsForTopic(config configuration.Config, broker []kafka.Broker,
 		}
 
 		// handle removed partitions
-		if currentTopicPartitionCount > topic.Partitions && config.AllowTopicDelete {
+		if current.Partitions > topic.Partitions && config.AllowTopicDelete {
 			commands.deleteTopics = append(commands.deleteTopics, topic.Name)
 			topicConfigEntries := []kafka.ConfigEntry{}
 			for key, value := range topic.Config {
@@ -224,7 +235,7 @@ func CollectCommandsForTopic(config configuration.Config, broker []kafka.Broker,
 		}
 
 		// handle changed replicas
-		if currentReplication != topic.Replicas {
+		if current.Replicas != topic.Replicas {
 			assignments := []kafka.AlterPartitionReassignmentsRequestAssignment{}
 			for _, partition := range topicPartitions {
 				brokerIds := []int{}

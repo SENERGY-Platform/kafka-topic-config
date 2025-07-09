@@ -28,8 +28,7 @@ import (
 	"strings"
 )
 
-func LogCurrentState(config configuration.Config, client *kafka.Client, partitions []kafka.Partition) (err error) {
-	currentState, err := GetCurrentState(config, client, partitions)
+func LogCurrentState(config configuration.Config, currentState configuration.TopicConfigs) (err error) {
 	output, err := yaml.Marshal(currentState)
 	if err != nil {
 		return err
