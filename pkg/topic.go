@@ -75,6 +75,10 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	//exec commands
 
+	if config.DryRun {
+		fmt.Println("dry-run")
+	}
+
 	if config.AllowTopicDelete {
 		requestLogger.DeleteTopics(&kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
 		if !config.DryRun && len(commands.deleteTopics) > 0 {
