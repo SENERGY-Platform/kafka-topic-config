@@ -82,8 +82,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 	if config.AllowTopicDelete {
 		requestLogger.DeleteTopics(&kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
 		if !config.DryRun && len(commands.deleteTopics) > 0 {
-			timeoutCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-			_, err = client.DeleteTopics(timeoutCtx, &kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
+			_, err = client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
 			if err != nil {
 				return err
 			}
@@ -93,8 +92,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	requestLogger.CreateTopics(&kafka.CreateTopicsRequest{Topics: commands.createTopics})
 	if !config.DryRun && len(commands.createTopics) > 0 {
-		timeoutCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err = client.CreateTopics(timeoutCtx, &kafka.CreateTopicsRequest{Topics: commands.createTopics})
+		_, err = client.CreateTopics(context.Background(), &kafka.CreateTopicsRequest{Topics: commands.createTopics})
 		if err != nil {
 			return err
 		}
@@ -102,8 +100,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	requestLogger.AlterConfigs(&kafka.AlterConfigsRequest{Resources: commands.alterConfig})
 	if !config.DryRun && len(commands.alterConfig) > 0 {
-		timeoutCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err = client.AlterConfigs(timeoutCtx, &kafka.AlterConfigsRequest{Resources: commands.alterConfig})
+		_, err = client.AlterConfigs(context.Background(), &kafka.AlterConfigsRequest{Resources: commands.alterConfig})
 		if err != nil {
 			return err
 		}
@@ -111,8 +108,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	requestLogger.CreatePartitions(&kafka.CreatePartitionsRequest{Topics: commands.createPartitions})
 	if !config.DryRun && len(commands.createPartitions) > 0 {
-		timeoutCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err = client.CreatePartitions(timeoutCtx, &kafka.CreatePartitionsRequest{Topics: commands.createPartitions})
+		_, err = client.CreatePartitions(context.Background(), &kafka.CreatePartitionsRequest{Topics: commands.createPartitions})
 		if err != nil {
 			return err
 		}
@@ -122,8 +118,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 		reqCp := req
 		requestLogger.AlterPartitionReassignments(&reqCp)
 		if !config.DryRun {
-			timeoutCtx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-			_, err = client.AlterPartitionReassignments(timeoutCtx, &reqCp)
+			_, err = client.AlterPartitionReassignments(context.Background(), &reqCp)
 			if err != nil {
 				return err
 			}
