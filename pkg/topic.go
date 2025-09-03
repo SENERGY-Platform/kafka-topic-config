@@ -20,13 +20,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/SENERGY-Platform/kafka-topic-config/pkg/configuration"
-	"github.com/segmentio/kafka-go"
-	"k8s.io/client-go/kubernetes"
+	"log"
 	"math/rand"
 	"reflect"
 	"slices"
 	"time"
+
+	"github.com/SENERGY-Platform/kafka-topic-config/pkg/configuration"
+	"github.com/segmentio/kafka-go"
+	"k8s.io/client-go/kubernetes"
 )
 
 type KafkaClient interface {
@@ -70,12 +72,18 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 		}
 	}
 
+	topicNameList := []string{}
 	for _, topic := range topics {
-		temp, err := CollectCommandsForTopic(config, broker, partitions, current, topic)
-		if err != nil {
-			return err
+		if slices.Contains(topicNameList, topic.Name) {
+			log.Println("WARNING: found (and ignore) duplicate topic config: " + topic.Name)
+		} else {
+			temp, err := CollectCommandsForTopic(config, broker, partitions, current, topic)
+			if err != nil {
+				return err
+			}
+			commands.Merge(temp)
+			topicNameList = append(topicNameList, topic.Name)
 		}
-		commands.Merge(temp)
 	}
 
 	//exec commands
