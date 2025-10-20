@@ -101,9 +101,12 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 	if config.AllowTopicDelete {
 		requestLogger.DeleteTopics(&kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
 		if !config.DryRun && len(commands.deleteTopics) > 0 {
-			_, err = client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
-			if err != nil {
-				return err
+			deltes := Chunk(commands.deleteTopics, 100)
+			for _, chunk := range deltes {
+				_, err = client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: chunk})
+				if err != nil {
+					return err
+				}
 			}
 			time.Sleep(5 * time.Second) //wait to allow delete to finish before creating new
 		}
@@ -159,6 +162,18 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 	}
 
 	return nil
+}
+
+func Chunk(s []string, n int) [][]string {
+	var chunk [][]string
+	for i := 0; i < len(s); i += n {
+		end := i + n
+		if end > len(s) {
+			end = len(s)
+		}
+		chunk = append(chunk, s[i:end])
+	}
+	return chunk
 }
 
 type Commands struct {
