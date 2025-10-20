@@ -86,6 +86,12 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 		}
 	}
 
+	temp, err := CheckDeviceTypeTopics(config, partitions)
+	if err != nil {
+		return err
+	}
+	commands.Merge(temp)
+
 	//exec commands
 
 	if config.DryRun {

@@ -1,4 +1,6 @@
 {
+    "service_topic_prefix": "urn_infai_ses_service_",
+    "device_repository_url": "",
     "kafka_url": "",
     "topic_config_location": "",
     "allow_topic_delete": true,
