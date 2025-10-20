@@ -102,7 +102,8 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 		requestLogger.DeleteTopics(&kafka.DeleteTopicsRequest{Topics: commands.deleteTopics})
 		if !config.DryRun && len(commands.deleteTopics) > 0 {
 			deltes := Chunk(commands.deleteTopics, 100)
-			for _, chunk := range deltes {
+			for i, chunk := range deltes {
+				log.Println("delete topics chunk", i+1, "of", len(deltes), "with", len(chunk), "topics")
 				_, err = client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: chunk})
 				if err != nil {
 					return err
