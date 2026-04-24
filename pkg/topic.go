@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -75,7 +74,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 	topicNameList := []string{}
 	for _, topic := range topics {
 		if slices.Contains(topicNameList, topic.Name) {
-			log.Println("WARNING: found (and ignore) duplicate topic config: " + topic.Name)
+			config.GetLogger().Warn("found (and ignore) duplicate topic config", "topic", topic.Name)
 		} else {
 			temp, err := CollectCommandsForTopic(config, broker, partitions, current, topic)
 			if err != nil {
@@ -103,7 +102,7 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 		if !config.DryRun && len(commands.deleteTopics) > 0 {
 			deltes := Chunk(commands.deleteTopics, 100)
 			for i, chunk := range deltes {
-				log.Println("delete topics chunk", i+1, "of", len(deltes), "with", len(chunk), "topics")
+				config.GetLogger().Info("delete topics chunk", "chunk", i+1, "delete-count", len(deltes), "chunk-count", len(chunk))
 				_, err = client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: chunk})
 				if err != nil {
 					return err

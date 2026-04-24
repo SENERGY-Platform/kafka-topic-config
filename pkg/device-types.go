@@ -18,7 +18,6 @@ package pkg
 
 import (
 	"iter"
-	"log"
 	"slices"
 	"strings"
 
@@ -30,11 +29,11 @@ import (
 
 func CheckDeviceTypeTopics(config configuration.Config, partitions []kafka.Partition) (commands Commands, err error) {
 	if config.DeviceRepositoryUrl == "" || config.DeviceRepositoryUrl == "-" {
-		log.Println("WARNING: DeviceRepositoryUrl not set --> skipping device-type topic check")
+		config.GetLogger().Warn("DeviceRepositoryUrl not set --> skipping device-type topic check")
 		return commands, nil
 	}
 	if config.ServiceTopicPrefix == "" || config.ServiceTopicPrefix == "-" {
-		log.Println("WARNING: ServiceTopicPrefix not set --> skipping device-type topic check")
+		config.GetLogger().Warn("ServiceTopicPrefix not set --> skipping device-type topic check")
 		return commands, nil
 	}
 	getBatch := func(limit int64, offset int64) ([]models.DeviceType, error) {

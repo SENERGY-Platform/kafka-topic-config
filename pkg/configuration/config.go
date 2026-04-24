@@ -17,7 +17,14 @@
 package configuration
 
 import (
+	"log/slog"
+	"os"
+	"runtime/debug"
+	"strings"
+	"time"
+
 	"github.com/SENERGY-Platform/go-service-base/config-hdl"
+	struct_logger "github.com/SENERGY-Platform/go-service-base/struct-logger"
 )
 
 type Config struct {
@@ -32,9 +39,41 @@ type Config struct {
 	LogCurrentStateToFile                   string `json:"log_current_state_to_file" env_var:"LOG_CURRENT_STATE_TO_FILE"`
 	LogCurrentStateIfTopicMatchesRegex      string `json:"log_current_state_if_topic_matches_regex" env_var:"LOG_CURRENT_STATE_IF_TOPIC_MATCHES_REGEX"`
 	LogCurrentStateIfTopicDoesNotMatchRegex string `json:"log_current_state_if_topic_does_not_match_regex" env_var:"LOG_CURRENT_STATE_IF_TOPIC_DOES_NOT_MATCH_REGEX"`
+
+	LogLevel string       `json:"log_level" env_var:"LOG_LEVEL"`
+	logger   *slog.Logger `json:"-"`
 }
 
 func Load(location string) (conf Config, err error) {
 	err = config_hdl.Load(&conf, nil, nil, nil, location)
 	return conf, err
+}
+
+func (this *Config) GetLogger() *slog.Logger {
+	if this.logger == nil {
+		info, ok := debug.ReadBuildInfo()
+		project := ""
+		org := ""
+		if ok {
+			if parts := strings.Split(info.Main.Path, "/"); len(parts) > 2 {
+				project = strings.Join(parts[2:], "/")
+				org = strings.Join(parts[:2], "/")
+			}
+		}
+		this.logger = struct_logger.New(
+			struct_logger.Config{
+				Handler:    struct_logger.JsonHandlerSelector,
+				Level:      this.LogLevel,
+				TimeFormat: time.RFC3339Nano,
+				TimeUtc:    true,
+				AddMeta:    true,
+			},
+			os.Stdout,
+			org,
+			project,
+		)
+		slog.SetDefault(this.logger)
+		slog.SetLogLoggerLevel(slog.LevelInfo)
+	}
+	return this.logger
 }

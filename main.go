@@ -20,14 +20,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/SENERGY-Platform/kafka-topic-config/pkg"
-	"github.com/SENERGY-Platform/kafka-topic-config/pkg/configuration"
-	"github.com/SENERGY-Platform/kafka-topic-config/pkg/tests"
-	"github.com/SENERGY-Platform/kafka-topic-config/pkg/tests/docker"
 	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/SENERGY-Platform/kafka-topic-config/pkg"
+	"github.com/SENERGY-Platform/kafka-topic-config/pkg/configuration"
+	"github.com/SENERGY-Platform/kafka-topic-config/pkg/tests"
+	"github.com/SENERGY-Platform/kafka-topic-config/pkg/tests/docker"
 )
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 	} else {
 		err = pkg.Run(conf)
 		if err != nil {
+			conf.GetLogger().Error("fatal error", "error", err)
 			log.Fatal(err)
 		}
 	}
