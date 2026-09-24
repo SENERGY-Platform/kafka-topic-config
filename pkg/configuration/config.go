@@ -27,25 +27,34 @@ import (
 	struct_logger "github.com/SENERGY-Platform/go-service-base/struct-logger"
 )
 
+// DefaultAdminRequestTimeout is used whenever AdminRequestTimeout is unset (zero), so a missing
+// config never sends a zero broker-side timeout again (see AdminRequestTimeout).
+const DefaultAdminRequestTimeout = 60 * time.Second
+
 type Config struct {
-	ServiceTopicPrefix                      string `json:"service_topic_prefix" env_var:"SERVICE_TOPIC_PREFIX"`
-	DeviceRepositoryUrl                     string `json:"device_repository_url" env_var:"DEVICE_REPOSITORY_URL"`
-	KafkaUrl                                string `json:"kafka_url" env_var:"KAFKA_URL"`
-	TopicConfigLocation                     string `json:"topic_config_location" env_var:"TOPIC_CONFIG_LOCATION"`
-	AllowTopicDelete                        bool   `json:"allow_topic_delete" env_var:"ALLOW_TOPIC_DELETE"`
-	EnableKubernetesPodRestart              bool   `json:"enable_kubernetes_pod_restart" env_var:"ENABLE_KUBERNETES_POD_RESTART"`
-	DryRun                                  bool   `json:"dry_run" env_var:"DRY_RUN"`
-	LogCurrentState                         bool   `json:"log_current_state" env_var:"LOG_CURRENT_STATE"`
-	LogCurrentStateToFile                   string `json:"log_current_state_to_file" env_var:"LOG_CURRENT_STATE_TO_FILE"`
-	LogCurrentStateIfTopicMatchesRegex      string `json:"log_current_state_if_topic_matches_regex" env_var:"LOG_CURRENT_STATE_IF_TOPIC_MATCHES_REGEX"`
-	LogCurrentStateIfTopicDoesNotMatchRegex string `json:"log_current_state_if_topic_does_not_match_regex" env_var:"LOG_CURRENT_STATE_IF_TOPIC_DOES_NOT_MATCH_REGEX"`
+	ServiceTopicPrefix  string `json:"service_topic_prefix" env_var:"SERVICE_TOPIC_PREFIX"`
+	DeviceRepositoryUrl string `json:"device_repository_url" env_var:"DEVICE_REPOSITORY_URL"`
+	KafkaUrl            string `json:"kafka_url" env_var:"KAFKA_URL"`
+	TopicConfigLocation string `json:"topic_config_location" env_var:"TOPIC_CONFIG_LOCATION"`
+	// AdminRequestTimeout bounds every admin request sent to the kafka cluster (create/delete/alter
+	// topics, partition reassignment). Without it, AlterPartitionReassignments sends a zero
+	// broker-side timeout, which a KRaft controller refuses immediately.
+	AdminRequestTimeout                     time.Duration `json:"admin_request_timeout" env_var:"ADMIN_REQUEST_TIMEOUT"` //json: nanoseconds, env: duration string ("60s")
+	AllowTopicDelete                        bool          `json:"allow_topic_delete" env_var:"ALLOW_TOPIC_DELETE"`
+	EnableKubernetesPodRestart              bool          `json:"enable_kubernetes_pod_restart" env_var:"ENABLE_KUBERNETES_POD_RESTART"`
+	DryRun                                  bool          `json:"dry_run" env_var:"DRY_RUN"`
+	LogCurrentState                         bool          `json:"log_current_state" env_var:"LOG_CURRENT_STATE"`
+	LogCurrentStateToFile                   string        `json:"log_current_state_to_file" env_var:"LOG_CURRENT_STATE_TO_FILE"`
+	LogCurrentStateIfTopicMatchesRegex      string        `json:"log_current_state_if_topic_matches_regex" env_var:"LOG_CURRENT_STATE_IF_TOPIC_MATCHES_REGEX"`
+	LogCurrentStateIfTopicDoesNotMatchRegex string        `json:"log_current_state_if_topic_does_not_match_regex" env_var:"LOG_CURRENT_STATE_IF_TOPIC_DOES_NOT_MATCH_REGEX"`
 
 	LogLevel string       `json:"log_level" env_var:"LOG_LEVEL"`
 	logger   *slog.Logger `json:"-"`
 }
 
 func Load(location string) (conf Config, err error) {
-	err = config_hdl.Load(&conf, nil, nil, nil, location)
+	conf.AdminRequestTimeout = DefaultAdminRequestTimeout
+	err = config_hdl.Load(&conf, nil, envTypeParsers, nil, location)
 	return conf, err
 }
 
