@@ -14,3 +14,7 @@ example:
 ```
 ./kafka-topic-config -test=old.yaml,new.yaml
 ```
+
+### Configuration
+
+`admin_request_timeout` (env `ADMIN_REQUEST_TIMEOUT`, duration string e.g. "60s") bounds every admin request sent to the kafka cluster (create/delete/alter topics, partition reassignment); default 60s.

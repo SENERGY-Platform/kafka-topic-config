@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"reflect"
 	"slices"
@@ -51,8 +52,14 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	requestLogger := &KafkaClientRequestLogger{}
 
+	adminTimeout := config.AdminRequestTimeout
+	if adminTimeout <= 0 {
+		adminTimeout = configuration.DefaultAdminRequestTimeout
+	}
+
 	client := &kafka.Client{
-		Addr: kafka.TCP(brokerAddr...),
+		Addr:    kafka.TCP(brokerAddr...),
+		Timeout: adminTimeout,
 	}
 
 	//collect commands
@@ -91,7 +98,17 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 	}
 	commands.Merge(temp)
 
-	//exec commands
+	return ExecuteCommands(config, kubernetesClient, client, requestLogger, adminTimeout, commands)
+}
+
+// ExecuteCommands sends the collected commands to the kafka cluster and, if enabled, restarts the
+// affected kubernetes pods. client only needs the subset of *kafka.Client used here, so tests can
+// pass a fake. A transport error aborts immediately, since no response was received to evaluate;
+// a per-item error reported inside an otherwise successful response is logged and collected instead,
+// so one bad topic does not stop the remaining commands from being tried and reported.
+func ExecuteCommands(config configuration.Config, kubernetesClient kubernetes.Interface, client KafkaClient, requestLogger *KafkaClientRequestLogger, adminTimeout time.Duration, commands Commands) (err error) {
+	logger := config.GetLogger()
+	var itemErrs []error
 
 	if config.DryRun {
 		fmt.Println("dry-run")
@@ -103,10 +120,11 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 			deltes := Chunk(commands.deleteTopics, 100)
 			for i, chunk := range deltes {
 				config.GetLogger().Info("delete topics chunk", "chunk", i+1, "delete-count", len(deltes), "chunk-count", len(chunk))
-				_, err = client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: chunk})
+				resp, err := client.DeleteTopics(context.Background(), &kafka.DeleteTopicsRequest{Topics: chunk})
 				if err != nil {
 					return err
 				}
+				itemErrs = append(itemErrs, EvalDeleteTopicsResponse(logger, resp)...)
 			}
 			time.Sleep(5 * time.Second) //wait to allow delete to finish before creating new
 		}
@@ -114,36 +132,41 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 
 	requestLogger.CreateTopics(&kafka.CreateTopicsRequest{Topics: commands.createTopics})
 	if !config.DryRun && len(commands.createTopics) > 0 {
-		_, err = client.CreateTopics(context.Background(), &kafka.CreateTopicsRequest{Topics: commands.createTopics})
+		resp, err := client.CreateTopics(context.Background(), &kafka.CreateTopicsRequest{Topics: commands.createTopics})
 		if err != nil {
 			return err
 		}
+		itemErrs = append(itemErrs, EvalCreateTopicsResponse(logger, resp)...)
 	}
 
 	requestLogger.AlterConfigs(&kafka.AlterConfigsRequest{Resources: commands.alterConfig})
 	if !config.DryRun && len(commands.alterConfig) > 0 {
-		_, err = client.AlterConfigs(context.Background(), &kafka.AlterConfigsRequest{Resources: commands.alterConfig})
+		resp, err := client.AlterConfigs(context.Background(), &kafka.AlterConfigsRequest{Resources: commands.alterConfig})
 		if err != nil {
 			return err
 		}
+		itemErrs = append(itemErrs, EvalAlterConfigsResponse(logger, resp)...)
 	}
 
 	requestLogger.CreatePartitions(&kafka.CreatePartitionsRequest{Topics: commands.createPartitions})
 	if !config.DryRun && len(commands.createPartitions) > 0 {
-		_, err = client.CreatePartitions(context.Background(), &kafka.CreatePartitionsRequest{Topics: commands.createPartitions})
+		resp, err := client.CreatePartitions(context.Background(), &kafka.CreatePartitionsRequest{Topics: commands.createPartitions})
 		if err != nil {
 			return err
 		}
+		itemErrs = append(itemErrs, EvalCreatePartitionsResponse(logger, resp)...)
 	}
 
 	for _, req := range commands.alterPartitions {
 		reqCp := req
+		reqCp.Timeout = adminTimeout
 		requestLogger.AlterPartitionReassignments(&reqCp)
 		if !config.DryRun {
-			_, err = client.AlterPartitionReassignments(context.Background(), &reqCp)
+			resp, err := client.AlterPartitionReassignments(context.Background(), &reqCp)
 			if err != nil {
 				return err
 			}
+			itemErrs = append(itemErrs, EvalAlterPartitionReassignmentsResponse(logger, resp)...)
 		}
 	}
 
@@ -161,7 +184,70 @@ func SetTopics(config configuration.Config, kubernetesClient kubernetes.Interfac
 		}
 	}
 
-	return nil
+	return errors.Join(itemErrs...)
+}
+
+// EvalDeleteTopicsResponse logs and collects the per-topic errors kafka-go reports for DeleteTopics;
+// a nil map entry means that topic's delete succeeded.
+func EvalDeleteTopicsResponse(logger *slog.Logger, resp *kafka.DeleteTopicsResponse) (errs []error) {
+	for topic, topicErr := range resp.Errors {
+		if topicErr != nil {
+			logger.Error("failed to delete topic", "topic", topic, "error", topicErr)
+			errs = append(errs, fmt.Errorf("delete topic %v: %w", topic, topicErr))
+		}
+	}
+	return errs
+}
+
+// EvalCreateTopicsResponse logs and collects the per-topic errors kafka-go reports for CreateTopics.
+func EvalCreateTopicsResponse(logger *slog.Logger, resp *kafka.CreateTopicsResponse) (errs []error) {
+	for topic, topicErr := range resp.Errors {
+		if topicErr != nil {
+			logger.Error("failed to create topic", "topic", topic, "error", topicErr)
+			errs = append(errs, fmt.Errorf("create topic %v: %w", topic, topicErr))
+		}
+	}
+	return errs
+}
+
+// EvalCreatePartitionsResponse logs and collects the per-topic errors kafka-go reports for
+// CreatePartitions.
+func EvalCreatePartitionsResponse(logger *slog.Logger, resp *kafka.CreatePartitionsResponse) (errs []error) {
+	for topic, topicErr := range resp.Errors {
+		if topicErr != nil {
+			logger.Error("failed to create partitions", "topic", topic, "error", topicErr)
+			errs = append(errs, fmt.Errorf("create partitions for topic %v: %w", topic, topicErr))
+		}
+	}
+	return errs
+}
+
+// EvalAlterConfigsResponse logs and collects the per-resource errors kafka-go reports for
+// AlterConfigs.
+func EvalAlterConfigsResponse(logger *slog.Logger, resp *kafka.AlterConfigsResponse) (errs []error) {
+	for resource, resourceErr := range resp.Errors {
+		if resourceErr != nil {
+			logger.Error("failed to alter config", "resource_type", resource.Type, "resource_name", resource.Name, "error", resourceErr)
+			errs = append(errs, fmt.Errorf("alter config for %v: %w", resource.Name, resourceErr))
+		}
+	}
+	return errs
+}
+
+// EvalAlterPartitionReassignmentsResponse logs and collects both the top-level and the per-partition
+// errors kafka-go reports for AlterPartitionReassignments.
+func EvalAlterPartitionReassignmentsResponse(logger *slog.Logger, resp *kafka.AlterPartitionReassignmentsResponse) (errs []error) {
+	if resp.Error != nil {
+		logger.Error("failed to reassign partitions", "error", resp.Error)
+		errs = append(errs, fmt.Errorf("reassign partitions: %w", resp.Error))
+	}
+	for _, result := range resp.PartitionResults {
+		if result.Error != nil {
+			logger.Error("failed to reassign partition", "topic", result.Topic, "partition", result.PartitionID, "error", result.Error)
+			errs = append(errs, fmt.Errorf("reassign topic %v partition %v: %w", result.Topic, result.PartitionID, result.Error))
+		}
+	}
+	return errs
 }
 
 func Chunk(s []string, n int) [][]string {
